@@ -11,21 +11,29 @@ const CUBE_SIZE = 1;
 
 class createMino {
   constructor(mino_type) {
+    console.log(mino_type);
     switch(mino_type) {
       case 0:
         this.cubes = this.createMinoI();
+        break;
       case 1:
         this.cubes = this.createMinoJ();
+        break;
       case 2:
         this.cubes = this.createMinoL();
+        break;
       case 3:
         this.cubes = this.createMinoO();
+        break;
       case 4:
         this.cubes = this.createMinoS();
+        break;
       case 5:
         this.cubes = this.createMinoT();
+        break;
       case 6:
         this.cubes = this.createMinoZ();
+        break;
     }
   }
   

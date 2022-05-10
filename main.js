@@ -1,70 +1,24 @@
-import createMino from './mino.js';
+import createMino from './createMino.js';
+import gameField from './gameField.js';
+import { getRandomInt, shuffle } from './utils.js';
 
-let mino = new createMino(0, 0);
-console.log(mino.cubes);
-
+// Vals
 var camera;
 var scene;
 var renderer;
 var controls;
 var target;
+var field = new gameField();
+var is_game_started = false;
+
+var clock = new THREE.Clock();
+clock.start();
 
 // GAME SETTINGS
 const MAX_HEIGHT = 5;
+const CUBE_SIZE = 1;
 
-
-// CUBE SETTINGS;
-var CUBE_SIZE = 1;
-const REM = 30;
-var field = [...Array(100)].map(k=>[...Array(100)].map(k=>[...Array(100)].map(k=>null)));
-function getField(vector) {
-  return field[vector.x + REM][vector.y + REM][vector.z + REM];
-}
-function putField(vector, object) {
-  field[vector.x + REM][vector.y + REM][vector.z + REM] = object;
-}
-function doesExist(vector) {
-  return field[vector.x + REM][vector.y + REM][vector.z + REM] != null;
-}
-function checkReachable() {
-  var flag = true;
-
-  target.children.forEach(element => {
-    scene.updateMatrixWorld();
-    target.updateMatrixWorld();        
-    var curPosition = new THREE.Vector3();
-    curPosition.setFromMatrixPosition(element.matrixWorld);
-
-    if (doesExist(curPosition)) flag = false;
-  });
-
-  return flag;
-}
-
-// Logic
-function generateNewMino() {
-  var val = Math.floor(Math.random() * 7);
-
-  var tar;
-
-  if (val == 0) tar = createMinoI();
-  else if(val == 1) tar = createMinoS();
-  else if(val == 2) tar = createMinoZ();
-  else if(val == 3) tar = createMinoT();
-  else if(val == 4) tar = createMinoO();
-  else if(val == 5) tar = createMinoJ();
-  else if(val == 6) tar = createMinoL();
-
-  tar.position.set(getRandomInt(-2, 4), CUBE_SIZE * MAX_HEIGHT, getRandomInt(-2, 4));
-
-  var valy = Math.floor(Math.random() * 4);
-  tar.rotation.y = valy * (Math.PI / 2);
-  
-  scene.add(tar);
-
-  return tar;
-}
-
+// UA
 var ua = navigator.userAgent;
 if (ua.indexOf('iPhone') > 0 || ua.indexOf('iPod') > 0 || ua.indexOf('Android') > 0) {
     var sp = true;
@@ -72,14 +26,66 @@ if (ua.indexOf('iPhone') > 0 || ua.indexOf('iPod') > 0 || ua.indexOf('Android') 
     var sp = true;
 }
 
-// Utils
-function getRandomInt(min, max) {
-  min = Math.ceil(min);
-  max = Math.floor(max);
-  return Math.floor(Math.random() * (max - min) + min); //The maximum is exclusive and the minimum is inclusive
+
+// Logic
+var bag = [];
+function randomGenerator() {
+  if (bag.length == 0) {
+    bag = [0, 1, 2, 3, 4, 5, 6];
+    shuffle(bag);
+  }
+  return bag.pop();
 }
 
-function createField() {
+function generateNewMino() {
+  let val = randomGenerator();
+  let tar = new createMino(val).cubes;
+
+  let valy = Math.floor(Math.random() * 4);
+  tar.rotation.y = valy * (Math.PI / 2);
+
+  for(var _ = 0; _ < 200; ++_) {
+    tar.position.set(getRandomInt(-4, 6), CUBE_SIZE * MAX_HEIGHT, getRandomInt(-4, 6));
+    if (checkReachable(tar)) break;
+  }
+
+  scene.add(tar);
+
+  return tar;
+}
+
+function checkReachable(target) {
+  var flag = true;  
+  target.children.forEach(element => {
+    scene.updateMatrixWorld();
+    target.updateMatrixWorld();        
+    var curPosition = new THREE.Vector3();
+    curPosition.setFromMatrixPosition(element.matrixWorld);
+
+    if (field.doesObjectExist(curPosition)) flag = false;
+  });
+
+  return flag;
+}
+
+function alterObject(object) {
+  object.children.forEach(element => {
+    scene.updateMatrixWorld();
+    target.updateMatrixWorld();
+    var curPosition = new THREE.Vector3();
+    curPosition.setFromMatrixPosition(element.matrixWorld);
+
+    var cubeGeom = new THREE.CubeGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE);
+    var material = new THREE.MeshLambertMaterial({color: element.material.color });
+    var cube = new THREE.Mesh(cubeGeom, material);
+    cube.position.set(curPosition.x, curPosition.y, curPosition.z);
+    scene.add(cube);
+    
+    field.putObject(cube.position, cube);
+  });
+}
+
+function createGrid() {
   var grid_count = 10;
   var grid_size = grid_count * CUBE_SIZE;
   var grid = new THREE.GridHelper(grid_size, grid_count);
@@ -88,336 +94,172 @@ function createField() {
   return grid;
 }
 
+function load_field() {
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+  renderer = new THREE.WebGLRenderer({antialias: true});
+  renderer.setClearColor(new THREE.Color(0xEEEEEE));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
 
-function createMinoI() {
-    var group = new THREE.Object3D();
+  // Grid Setting.
+  var grid = createGrid();
+  scene.add(grid);
 
-    for (var x = 0; x < 4; ++x) {
-      var geometry = new THREE.BoxBufferGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE);
-      var edges = new THREE.EdgesGeometry( geometry );
-      var line = new THREE.LineSegments( edges, new THREE.LineBasicMaterial( { color: 0x92D7E7} ) );
-      line.position.set(x * CUBE_SIZE - 2 * CUBE_SIZE, 0, 0);
-      group.add(line);
-    }
+  // Camera Setting.
+  camera.position.set(0.5, 5, 20);
+  controls = new THREE.OrbitControls(camera, document.body);
+  controls.enables = false;
+  controls.keys = {LEFT: null, UP: null, RIGHT: null, BOTTOM: null};
 
-    return group;
+  // SpotLight setting.
+  var spotLight = new THREE.SpotLight(0xffffff);
+  spotLight.position.set(-20, 50, -20);
+  scene.add(spotLight);
+
+  // 全方向から色が見えるよう4つのライトを向かい合わせで配置
+  var bright = 0.8
+  var add_light = (x, y, z) => {
+    var directionalLight = new THREE.DirectionalLight('#ffffff', bright);
+    directionalLight.position.set(x, y, z);
+    scene.add(directionalLight);
+  }
+  add_light(10, 10, 10);
+  add_light(-10, -10, -10);
+  add_light(-10, 10, 10);
+  add_light(10, -10, -10);
+
+  // Render
+  renderer.render(scene, camera);
 }
 
-function createMinoO() {
-    var group = new THREE.Object3D();
-
-    for (var x = 0; x < 2; ++x) for(var y = 0; y < 1; ++y) for(var z = 0; z < 2; ++z) {
-      var geometry = new THREE.BoxBufferGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE);
-      var edges = new THREE.EdgesGeometry( geometry );
-      var line = new THREE.LineSegments( edges, new THREE.LineBasicMaterial( { color: 0xE8C473} ) );
-      line.position.set(x * CUBE_SIZE - CUBE_SIZE, y * CUBE_SIZE - CUBE_SIZE, z * CUBE_SIZE - CUBE_SIZE);
-      group.add(line);
-    }
-
-    return group;
-}
-
-function createMinoJ() {
-    var group = new THREE.Object3D();
-
-    for (var x = 0; x < 3; ++x) for(var z = 0; z < 2; ++z) {
-      if(x == 1 && z == 0) continue;
-      if(x == 2 && z == 0) continue;
-
-      var geometry = new THREE.BoxBufferGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE);
-      var edges = new THREE.EdgesGeometry( geometry );
-      var line = new THREE.LineSegments( edges, new THREE.LineBasicMaterial( { color: 0x1E90FF} ) );
-      line.position.set(x * CUBE_SIZE - CUBE_SIZE, 0, z * CUBE_SIZE - CUBE_SIZE);
-      group.add(line);
-    }
-
-    return group;
-}
-
-function createMinoL() {
-    var group = new THREE.Object3D();
-
-    for (var x = 0; x < 3; ++x) for(var z = 0; z < 2; ++z) {
-      if(x == 0 && z == 0) continue;
-      if(x == 1 && z == 0) continue;
-
-      var geometry = new THREE.BoxBufferGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE);
-      var edges = new THREE.EdgesGeometry( geometry );
-      var line = new THREE.LineSegments( edges, new THREE.LineBasicMaterial( { color: 0xffa500} ) );
-      line.position.set(x * CUBE_SIZE - CUBE_SIZE, 0, z * CUBE_SIZE - CUBE_SIZE);
-      group.add(line);
-    }
-
-    return group;
-}
-
-function createMinoS() {
-    var group = new THREE.Object3D();
-
-    for (var x = 0; x < 3; ++x) for(var z = 0; z < 2; ++z) {
-      if(x == 0 && z == 0) continue;
-      if(x == 2 && z == 1) continue;
-
-      var geometry = new THREE.BoxBufferGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE);
-      var edges = new THREE.EdgesGeometry( geometry );
-      var line = new THREE.LineSegments( edges, new THREE.LineBasicMaterial( { color: 0x008000} ) );
-      line.position.set(x * CUBE_SIZE - CUBE_SIZE, 0, z * CUBE_SIZE - CUBE_SIZE);
-      group.add(line);
-    }
-
-    return group;
-}
-
-function createMinoZ() {
-    var group = new THREE.Object3D();
-
-    for (var x = 0; x < 3; ++x) for(var z = 0; z < 2; ++z) {
-      if(x == 0 && z == 1) continue;
-      if(x == 2 && z == 0) continue;
-
-      var geometry = new THREE.BoxBufferGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE);
-      var edges = new THREE.EdgesGeometry( geometry );
-      var line = new THREE.LineSegments( edges, new THREE.LineBasicMaterial( { color: 0xE45653} ) );
-      line.position.set(x * CUBE_SIZE - CUBE_SIZE, 0, z * CUBE_SIZE - CUBE_SIZE);
-      group.add(line);
-    }
-
-    return group;
-}
-
-function createMinoT() {
-    var group = new THREE.Object3D();
-
-    for (var x = 0; x < 3; ++x) for(var z = 0; z < 2; ++z) {
-      if(x == 0 && z == 0) continue;
-      if(x == 2 && z == 0) continue;
-
-      var geometry = new THREE.BoxBufferGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE);
-      var edges = new THREE.EdgesGeometry( geometry );
-      var line = new THREE.LineSegments( edges, new THREE.LineBasicMaterial( { color: 0xa260bf} ) );
-      line.position.set(x * CUBE_SIZE - CUBE_SIZE, 0, z * CUBE_SIZE - CUBE_SIZE);
-      group.add(line);
-    }
-
-    return group;
-}
-
-
-function initializer() {
+function initialize() {
   scene.remove(target);
-
-  // Field
-  for(var x = 0; x < 100; ++x) 
-    for(var y = 0; y < 100; ++y)
-      for(var z = 0; z < 100; ++z){
-        if(field[x][y][z] != null && field[x][y][z] != false){
-          scene.remove(field[x][y][z]);
-          field[x][y][z] = null;
-        }
-  }
-
-  for(var x = -12; x <= 12; ++x) {
-    for(var z = -12; z <= 12; ++z) {
-      putField(new THREE.Vector3(x, -1, z), false);
-
-      if(x <= -5 || x >= 6 || z <= -5 || z >= 6) {
-        for(var y = -1; y <= 30; ++y) {
-          putField(new THREE.Vector3(x, y, z), false);
-        }
-      }
-    }
-  }
-
+  field.initialize(scene);
   target = generateNewMino();
 }
 
+function lp() {
+  load_field();
+  initialize();
+  var time = 0;
+  
+  function animate() {
+    if(is_game_started) return;
 
-function init() {
-    scene = new THREE.Scene();
-    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-    renderer = new THREE.WebGLRenderer({antialias: true});
-    renderer.setClearColor(new THREE.Color(0xEEEEEE));
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.shadowMap.enabled = true;
+    window.requestAnimationFrame( animate );
+    document.getElementById("WebGL-output").appendChild(renderer.domElement);
+    
+    var curTime = Math.trunc(clock.getElapsedTime());
+    if (curTime > time) {
+      time = curTime;
 
-    // var axes = new THREE.AxisHelper(25);
-    // scene.add(axes);
+      target.translateY(-CUBE_SIZE);
 
-    // Field Setting.
-    var field = createField();
-    scene.add(field);
+      if (!checkReachable(target)){
+        target.translateY(CUBE_SIZE);
 
-    // Camera Setting.
-    camera.position.set(0.5, 5, 20);
+        alterObject(target);
+        scene.remove(target);
+        field.flushObjects(scene);
+        target = generateNewMino();
 
-    controls = new THREE.OrbitControls(camera, document.body);
-    controls.enables = false;
-    controls.keys = {LEFT: null, UP: null, RIGHT: null, BOTTOM: null};
-    // controls.enabled = false;
-
-    // if(sp){
-    //   var gcontrols = new THREE.DeviceOrientationControls(camera, renderer.domElement);
-    // }else{
-    //   var controls = new THREE.OrbitControls(camera, renderer.domElement);
-    // }
-
-    // SpotLight setting.
-    var spotLight = new THREE.SpotLight(0xffffff);
-    spotLight.position.set(-20, 50, -20);
-    spotLight.castShadow = true;
-    scene.add(spotLight);
-
-    // 全方向から色が見えるよう4つのライトを向かい合わせで配置
-    var bright = 0.8
-    var add_light = (x, y, z) => {
-      var directionalLight = new THREE.DirectionalLight('#ffffff', bright);
-      directionalLight.position.set(x, y, z);
-      scene.add(directionalLight);
+        // GemeOver判定
+        if(!checkReachable(target)) initialize();
+      }
     }
-    add_light(10, 10, 10);
-    add_light(-10, -10, -10);
-    add_light(-10, 10, 10);
-    add_light(10, -10, -10);
 
-    // Render
+    var elapsed_time = clock.getElapsedTime();
+    camera.position.set(20 * Math.sin(elapsed_time * 0.1), 5, 20 * Math.cos(elapsed_time * 0.1));
+    camera.lookAt(new THREE.Vector3(0, 0, 0));
+
+    // Render again.
     renderer.render(scene, camera);
+  }
+  animate();
+}
 
-    initializer();
+// Start Game
+let button = document.getElementById('start_button');
+let explain = document.getElementsByClassName('explain')[0];
+button.addEventListener('click', ()=>{ explain.style.display='none'; });
+button.addEventListener('click', main);
 
+function main() {
+  is_game_started = true;
 
-    // Logic
-    // Alter
-    function alterObject(object) {
-      object.children.forEach(element => {
-        scene.updateMatrixWorld();
-        target.updateMatrixWorld();
-        var curPosition = new THREE.Vector3();
-        curPosition.setFromMatrixPosition(element.matrixWorld);
+  initialize();
 
-        var cubeGeom = new THREE.CubeGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE);
-        var material = new THREE.MeshLambertMaterial({color: element.material.color });
-        var cube = new THREE.Mesh(cubeGeom, material);
-        cube.position.set(curPosition.x, curPosition.y, curPosition.z);
-        scene.add(cube);
+  // Clock
+  var time = 0;
+
+  function render() {
+    controls.update();
+    renderer.render(scene, camera);
+  }
         
-        putField(cube.position, cube);
-      });
-    }
+  function animate() {
+    window.requestAnimationFrame( animate );
+    document.getElementById("WebGL-output").appendChild(renderer.domElement);
+    var curTime = Math.trunc(clock.getElapsedTime());
 
-    // Delete
-    function flush() {
-      for (var y = 0; y <= 20; ++y) {
-        // 面揃い
-        var flag_surface = true;
-        for(var x = -4; x <= 5; ++x) {
-          for(var z = -4; z <= 5; ++z) {
-            if(!doesExist(new THREE.Vector3(x, y, z))) flag_surface = false;
-          }
-        }
-        if(flag_surface) {
-          for(var x = -4; x <= 5; ++x) for(var z = -4; z <= 5; ++z) {
-            scene.remove(getField(new THREE.Vector3(x, y, z)));
-            putField(new THREE.Vector3(x, y, z), null);
-          }
-        }
+    if (curTime > time) {
+      time = curTime;
 
-        // 行揃い
-        for(var x = -4; x <= 5; ++x) {
-          var flag_col = true;
-          for(var z = -4; z <= 5; ++z) {
-            if(!doesExist(new THREE.Vector3(x, y, z))) flag_col = false;
-          }
-          if(flag_col) {
-            for(var z = -4; z <= 5; ++z) {
-              scene.remove(getField(new THREE.Vector3(x, y, z)));
-              putField(new THREE.Vector3(x, y, z), null);
-            }
-          }
-        }
+      target.translateY(-CUBE_SIZE);
 
-        // 列揃い
-        for(var z = -4; z <= 5; ++z) {
-          var flag_row = true;
-          for(var x = -4; x <= 5; ++x) {
-            if(!doesExist(new THREE.Vector3(x, y, z))) flag_row = false;
-          }
-          if(flag_row) {
-            for(var x = -4; x <= 5; ++x) {
-              scene.remove(getField(new THREE.Vector3(x, y, z)));
-              putField(new THREE.Vector3(x, y, z), null);
-            }
-          }
-        }
+      if (!checkReachable(target)){
+        target.translateY(CUBE_SIZE);
+
+        alterObject(target);
+        scene.remove(target);
+        field.flushObjects(scene);
+        target = generateNewMino();
+
+        // GemeOver判定
+        if(!checkReachable(target)) initialize();
       }
     }
-
-
-    // Clock
-    var clock = new THREE.Clock();
-    clock.start();
-    var time = 0;
-
-    function render() {
-      controls.update();
-      renderer.render(scene, camera);
-    }
-          
-    function animate() {
-      window.requestAnimationFrame( animate );
-      document.getElementById("WebGL-output").appendChild(renderer.domElement);
-      var curTime = Math.trunc(clock.getElapsedTime());
-
-      if (curTime > time) {
-        time = curTime;
-
-        target.translateY(-CUBE_SIZE);
-
-        if (!checkReachable()){
-          target.translateY(CUBE_SIZE);
-
-          alterObject(target);
-          scene.remove(target);
-          flush();
-          target = generateNewMino();
-
-          // GemeOver判定
-          if(!checkReachable()) initializer();
-        }
-      }
-      // Render again.
-      render();
-    }
-    animate();
+    // Render again.
+    render();
+  }
+  animate();
 }
 
 
 // Key Event
+var prev_keycode = -999;
+var prev_keytime = -999;
 window.addEventListener("keydown", handleKeydown);
 function handleKeydown(event){
   var keyCode = event.keyCode;
   // 条件文で制御する
   if (keyCode == 39){
-    // target.translateX(CUBE_SIZE); // Right
-    // if(!checkReachable()) target.translateX(-CUBE_SIZE);
-
     target.position.x += CUBE_SIZE// Right
-    if(!checkReachable()) target.position.x -= CUBE_SIZE;
+    if(!checkReachable(target)) target.position.x -= CUBE_SIZE;
   }
   if (keyCode == 37){
     target.position.x -= CUBE_SIZE// Left
-    if(!checkReachable()) target.position.x += CUBE_SIZE;
+    if(!checkReachable(target)) target.position.x += CUBE_SIZE;
   }
   if (keyCode == 38) {
     target.position.z -= CUBE_SIZE// Up
-    if(!checkReachable()) target.position.z += CUBE_SIZE;
+    if(!checkReachable(target)) target.position.z += CUBE_SIZE;
   }
   if (keyCode == 40){
     target.position.z += CUBE_SIZE// Up
-    if(!checkReachable()) target.position.z -= CUBE_SIZE;
+    if(!checkReachable(target)) target.position.z -= CUBE_SIZE;
   }
   if (keyCode == 32){
-    target.position.y -= CUBE_SIZE; // Space
-    if(!checkReachable()) target.position.y += CUBE_SIZE;
+    if (prev_keycode == 32 && (clock.getElapsedTime() - prev_keytime <= 0.3)) {
+      while(checkReachable(target)) target.position.y -= CUBE_SIZE;
+      target.position.y += CUBE_SIZE;
+      prev_keycode = -999;
+    }
+    else {
+      target.position.y -= CUBE_SIZE; // Space
+      if(!checkReachable(target)) target.position.y += CUBE_SIZE;
+    }
   }
 
 
@@ -454,6 +296,8 @@ function handleKeydown(event){
   //   if(!checkReachable()) target.rotation.y += (Math.PI / 2);
   // }
 
+    prev_keycode = keyCode;
+    prev_keytime = clock.getElapsedTime();
 }
 
 // For resizing.
@@ -463,4 +307,8 @@ function onResize() {
     renderer.setSize(window.innerWidth, window.innerHeight);
 }
 window.addEventListener('resize', onResize, false);
-window.onload = init;
+
+
+// onload
+if (is_game_started) window.onload = main;
+else window.onload = lp;

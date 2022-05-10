@@ -3,27 +3,29 @@
 
 <head>
     <title>3D Tetris (WIP)</title>
+    <link rel="stylesheet" type="text/css" href="style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/84/three.js"></script>
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/stats.js/r16/Stats.js"></script>
-    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.6.5/dat.gui.js"></script>
     <script type="text/javascript" src="https://82mou.github.io/threejs/js/OrbitControls.js"></script>
-    <!-- <script src="https://cdn.rawgit.com/mrdoob/three.js/master/examples/js/controls/DeviceOrientationControls.js"></script> -->
-    <style>
-        body {
-            /* set margin to 0 and overflow to hidden, to go fullscreen */
-            /* スクロールバー除去 */
-            margin: 0;
-            overflow: hidden;
-        }
-    </style>
 </head>
 
 <body>
-    <div id="Stats-output">
-    </div>
+    <!-- <div id="Stats-output">
+    </div> -->
+
     <!-- Div which will hold the Output -->
-    <div id="WebGL-output">
+    <div id="WebGL-output" >
     </div>
+    <div class="explain">
+        <span class='text' id='title'>3D Tetris</span><br/>
+
+        <span class='text'>Arrow Keys: Control tetrominos.</span><br/>
+        <span class='text'>SPACE: Soft drop.</span><br/>
+        <span class='text'>SPACE x2: Hard drop.</span><br />
+        <button class='text' id='start_button'>Click here to start...</button>
+    </div>
+
+
 
     <script type='module' src="main.js">
     </script>
